@@ -1,0 +1,14 @@
+{
+  "model": {
+    "input_size": 128
+  },
+
+  "data": {
+    "sequence_length": 5
+  },
+
+  "db_config": {
+    "host": "",
+    "port": 
+  }
+}
