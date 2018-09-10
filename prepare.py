@@ -1,15 +1,15 @@
-import numpy as np
-import random
-import json
 import argparse
-from pymongo import MongoClient
-from pymongo.database import Database
-from pymongo.collection import Collection
-from utils import User
-from tqdm import tqdm
-
+import json
+import random
 from multiprocessing import Pool
 
+import numpy as np
+from pymongo import MongoClient
+from pymongo.collection import Collection
+from pymongo.database import Database
+from tqdm import tqdm
+
+from utils import User
 
 users = {}
 db_config = {}
