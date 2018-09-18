@@ -22,7 +22,7 @@ def get_retweet_user(inputs):
     :param inputs: tuple which have tweet_id and rating(True/False)
     :return: tuple(engaged_user_vector: np.array, rating: 1/0)
     """
-    tweet_id, user_id, rating = inputs
+    tweet_id, user_id, tweet_text, rating = inputs
 
     client = MongoClient(**db_config)
     db: Database = client['fakenews']
@@ -35,7 +35,7 @@ def get_retweet_user(inputs):
         engaged_users.append(tweet['user'])
 
     if len(engaged_users) == 0:
-        return [], False
+        return [], False, False
 
     if len(engaged_users) < limit:
         engaged_users.extend([random.choice(engaged_users) for i in range(limit - len(engaged_users))])
@@ -48,7 +48,7 @@ def get_retweet_user(inputs):
     else:
         rating = 0
 
-    return engaged_users_vector, rating
+    return engaged_users_vector, tweet_text, rating
 
 
 if __name__ == '__main__':
@@ -75,28 +75,24 @@ if __name__ == '__main__':
     print("[+] Total users given labels: {:,}".format(len(users)))
 
     unique_tweets_filter = {
-        "retweeted_status.id": {
-            "$exists": False
-        },
-        "in_reply_to_status_id": {
-            "$eq": None
-        }
+        "retweeted_status.id": {"$exists": False},
+        "in_reply_to_status_id": {"$eq": None},
+        "lang": {"$eq": "en"}
     }
 
     tweets_count = tweets_collections.count_documents(unique_tweets_filter)
     tqdm.write("[+] Total tweets: {:,}".format(tweets_count))
 
-    tweets = []
     # Get original tweets except for re-tweets and rely tweets
-    loader = tweets_collections.find(unique_tweets_filter, {'_id': 1, 'user': 1})
+    loader = tweets_collections.find(unique_tweets_filter, {'_id': 1, 'user': 1, 'text': 1})
     # Filter out users whether each user has a ground truth label
-    loader = map(lambda x: (x['_id'], x['user']['id'], users.get(x['user']['id'], {}).get('rating', None)), loader)
-    loader = filter(lambda x: x[2] is not None, loader)
+    loader = map(lambda x: (x['_id'], x['user']['id'], x['text'], users.get(x['user']['id'], {}).get('rating', None)), loader)
+    loader = filter(lambda x: x[3] is not None, loader)
 
     with open(args.output, "wt") as output_f, tqdm(desc="tweets", total=tweets_count) as pbar, Pool(args.cpu) as pool:
-        for i, (vector, rating) in enumerate(pool.imap_unordered(get_retweet_user, loader)):
+        for i, (vector, tweet, rating) in enumerate(pool.imap_unordered(get_retweet_user, loader)):
             pbar.update()
             if vector:
                 vector = np.array(vector)
-                json_data = json.dumps([vector.tolist(), rating])
+                json_data = json.dumps([vector.tolist(), tweet, rating])
                 output_f.write(json_data + "\n")
