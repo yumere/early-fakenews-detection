@@ -1,3 +1,2 @@
 [submodule "fakenews-detection"]
-	path = fakenews-detection
 	url = https://github.com/rudvlf0413/fakenews-detection.git
