@@ -1,3 +1,4 @@
+from fakenews_detection.topic_feature import TopicFeature
 import argparse
 import json
 import os
@@ -17,8 +18,12 @@ from utils.data import SeqDataset, collate_fn
 def load_model(args, config):
     path = os.path.dirname(os.path.abspath(__file__))
 
+    # Load pretrained topic feature
+    topic_feature = TopicFeature(labels=(1, 0))
+    topic_feature.load(args.topic_feature)
+
     data = [json.loads(d) for d in open(args.input, "rt").readlines()]
-    dataset = SeqDataset(data)
+    dataset = SeqDataset(data, topic_feature)
 
     device = torch.device("cuda:{}".format(args.cuda) if args.cuda else "cpu")
 
@@ -114,12 +119,13 @@ def train(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, confi
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, help="config file path", required=True)
+    parser.add_argument('--config', type=str, help="config file path (required)", required=True)
     parser.add_argument('--cuda', type=int, default=None, help="GPU number (default: None=CPU)")
-    parser.add_argument('--logdir', type=str, help="log directory")
-    parser.add_argument('--test', type=str, default=None, help="checkpoint path for test")
+    parser.add_argument('--logdir', type=str, help="log directory (optional)")
+    parser.add_argument('--test', type=str, default=None, help="checkpoint path for test (optional)")
 
-    parser.add_argument('--input', type=str, help="input file path", required=True)
+    parser.add_argument('--input', type=str, help="input file path (required)", required=True)
+    parser.add_argument('--topic-feature', type=str, help="pretrained topic feature directory (required)", required=True)
     parser.add_argument('--learning-rate', type=float, default=0.2, metavar="0.2", help="learning rate for model")
     parser.add_argument('--batch-size', type=int, default=32, metavar='32', help="batch size for learning")
     parser.add_argument('--epoch', type=int, default=10, metavar="10", help="the number of epochs")
