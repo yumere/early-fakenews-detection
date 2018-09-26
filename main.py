@@ -14,9 +14,8 @@ from model import DetectModel
 from utils.data import SeqDataset, collate_fn
 
 
-def predict(args, config):
+def load_model(args, config):
     path = os.path.dirname(os.path.abspath(__file__))
-    checkpoint = torch.load(os.path.join(path, args.logdir, args.test))
 
     data = [json.loads(d) for d in open(args.input, "rt").readlines()]
     dataset = SeqDataset(data)
@@ -29,17 +28,29 @@ def predict(args, config):
                         cnn_layers=config['model']['cnn_layers'],
                         linear_hidden_size=config['model']['linear_hidden_size'],
                         linear_layers=config['model']['linear_layers'], output_size=config['model']['output_size'])
-    model.load_state_dict(checkpoint['state_dict'])
+
+    if args.test:
+        checkpoint = torch.load(os.path.join(path, args.logdir, args.test))
+        model.load_state_dict(checkpoint['state_dict'])
+        if args.logdir is None:
+            print("[-] No log directory option")
+            sys.exit(1)
+
     model = model.to(device)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, collate_fn=collate_fn)
-    h0 = torch.zeros(config['model']['rnn_layers'], args.batch_size, config['model']['hidden_size']).to(device)
+
+    return model, dataset, dataloader, device
+
+
+def predict(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, config: dict, device):
+    h0 = torch.zeros(config['model']['rnn_layers'], dataloader.batch_size, config['model']['hidden_size']).to(device)
 
     true_acc = []
     false_acc = []
 
     with tqdm(total=len(dataset), desc="Sequences", leave=False) as pbar:
-        for step, (sequences, labels) in enumerate(dataloader):
+        for step, (sequences, tweets, labels) in enumerate(dataloader):
             pbar.update(args.batch_size)
 
             sequences = torch.tensor(sequences, dtype=torch.float, requires_grad=False).to(device)
@@ -61,21 +72,11 @@ def predict(args, config):
     print("Total acc: {}/{}{:,}".format(sum(true_acc + false_acc), (len(true_acc) + len(false_acc)), sum(true_acc + false_acc) / (len(true_acc) + len(false_acc))))
 
 
-def train(args: argparse.Namespace, config: dict):
-    data = [json.loads(d) for d in open(args.input, "rt").readlines()]
-    dataset = SeqDataset(data)
-
-    device = torch.device("cuda:{}".format(args.cuda) if args.cuda else "cpu")
-
-    model = DetectModel(input_size=config['model']['input_size'], hidden_size=config['model']['hidden_size'], rnn_layers=config['model']['rnn_layers'],
-                        out_channels=config['model']['out_channels'], height=config['model']['height'], cnn_layers=config['model']['cnn_layers'],
-                        linear_hidden_size=config['model']['linear_hidden_size'], linear_layers=config['model']['linear_layers'], output_size=config['model']['output_size'])
-    model = model.to(device)
+def train(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, config: dict, device):
     optimizer = optim.Adam(params=model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
 
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True, collate_fn=collate_fn)
-    h0 = torch.zeros(config['model']['rnn_layers'], args.batch_size, config['model']['hidden_size']).to(device)
+    h0 = torch.zeros(config['model']['rnn_layers'], dataloader.batch_size, config['model']['hidden_size']).to(device)
 
     for epoch in tqdm(range(args.epoch), desc="Epochs"):
         with tqdm(total=len(dataset), desc="Sequences", leave=False) as pbar:
@@ -125,12 +126,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     config_json = json.load(open(args.config, "rt"))
+    model, dataset, dataloader, device = load_model(args, config_json)
 
     if args.test:
         if args.logdir is None:
             print("[-] No log directory option")
             sys.exit(1)
 
-        predict(args, config_json)
+        predict(model, dataset, dataloader, device)
     else:
-        train(args, config_json)
+        train(model, dataloader, dataloader, device)
