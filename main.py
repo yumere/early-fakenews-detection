@@ -1,4 +1,3 @@
-from fakenews_detection.topic_feature import TopicFeature
 import argparse
 import json
 import os
@@ -11,6 +10,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from fakenews_detection.topic_feature import TopicFeature
 from model import DetectModel
 from utils.data import SeqDataset, collate_fn
 
@@ -31,6 +31,7 @@ def load_model(args, config):
                         rnn_layers=config['model']['rnn_layers'],
                         out_channels=config['model']['out_channels'], height=config['model']['height'],
                         cnn_layers=config['model']['cnn_layers'],
+                        topic_size=config['model']['topic_size'],
                         linear_hidden_size=config['model']['linear_hidden_size'],
                         linear_layers=config['model']['linear_layers'], output_size=config['model']['output_size'])
 
@@ -59,9 +60,10 @@ def predict(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, con
             pbar.update(args.batch_size)
 
             sequences = torch.tensor(sequences, dtype=torch.float, requires_grad=False).to(device)
+            tweets= torch.tensor(tweets, dtype=torch.float, requires_grad=False).to(device)
             labels = torch.tensor(labels, dtype=torch.long, requires_grad=False).to(device)
 
-            output = model(sequences, h0)
+            output = model(sequences, tweets, h0)
             output = F.softmax(output, dim=1).argmax(dim=1)
 
             for o, t in zip(output.tolist(), labels.tolist()):
@@ -85,16 +87,17 @@ def train(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, confi
 
     for epoch in tqdm(range(args.epoch), desc="Epochs"):
         with tqdm(total=len(dataset), desc="Sequences", leave=False) as pbar:
-            for step, (sequences, labels) in enumerate(dataloader):
+            for step, (sequences, tweets, labels) in enumerate(dataloader):
                 pbar.update(args.batch_size)
 
                 model.zero_grad()
                 h0.data.zero_()
 
                 sequences = torch.tensor(sequences, dtype=torch.float, requires_grad=False).to(device)
+                tweets = torch.tensor(tweets, dtype=torch.float, requires_grad=False).to(device)
                 labels = torch.tensor(labels, dtype=torch.long, requires_grad=False).to(device)
 
-                output = model(sequences, h0)
+                output = model(sequences, tweets, h0)
 
                 loss = criterion(output, labels)
                 loss.backward()
@@ -139,6 +142,6 @@ if __name__ == '__main__':
             print("[-] No log directory option")
             sys.exit(1)
 
-        predict(model, dataset, dataloader, device)
+        predict(model, dataset, dataloader, config_json, device)
     else:
-        train(model, dataloader, dataloader, device)
+        train(model, dataloader, dataloader, config_json, device)

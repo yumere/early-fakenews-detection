@@ -1,7 +1,8 @@
+from itertools import chain
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from itertools import chain
 
 
 class RNNEncoder(nn.Module):
@@ -41,25 +42,26 @@ class DetectModel(nn.Module):
     def __init__(self, input_size,
                  hidden_size, rnn_layers,
                  out_channels, height, cnn_layers,
+                 topic_size,
                  linear_hidden_size, linear_layers, output_size):
         super(DetectModel, self).__init__()
         self.rnn_encoder = RNNEncoder(input_size=input_size, hidden_size=hidden_size, num_layers=rnn_layers)
         self.cnn_encoder = CNNEncoder(out_channels=out_channels, kernel_size=(height, input_size))
 
         self.linear = nn.Sequential(
-            nn.Linear(hidden_size + out_channels, linear_hidden_size), nn.ReLU(inplace=True),
+            nn.Linear(hidden_size + out_channels + topic_size, linear_hidden_size), nn.ReLU(inplace=True),
             *chain(*[(nn.Linear(linear_hidden_size, linear_hidden_size), nn.ReLU(inplace=True)) for i in range(linear_layers - 2)]),
             nn.Linear(linear_hidden_size, output_size)
         )
 
-    def forward(self, x, h0):
+    def forward(self, x, tweets, h0):
         # h0 for rnn_encoder
         rnn_output = self.rnn_encoder(x, h0)
         cnn_output = self.cnn_encoder(x)
         cnn_output = cnn_output.squeeze()
 
         # output.shape: batch x (hidden_size + out_channels)
-        output = torch.cat([rnn_output, cnn_output], dim=1)
+        output = torch.cat([rnn_output, cnn_output, tweets], dim=1)
         # output.shape: batch x output_size
         output = self.linear(output)
 
@@ -68,7 +70,7 @@ class DetectModel(nn.Module):
 
 if __name__ == '__main__':
     batch_size = 5
-    sequence_length =10
+    sequence_length = 10
     input_size = 15
     hidden_size = 5
     out_channels = 10
