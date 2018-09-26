@@ -36,7 +36,7 @@ def load_model(args, config):
                         linear_layers=config['model']['linear_layers'], output_size=config['model']['output_size'])
 
     if args.test:
-        checkpoint = torch.load(os.path.join(path, args.logdir, args.test))
+        checkpoint = torch.load(os.path.join(args.logdir, args.test))
         model.load_state_dict(checkpoint['state_dict'])
         if args.logdir is None:
             print("[-] No log directory option")
@@ -60,7 +60,7 @@ def predict(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, con
             pbar.update(args.batch_size)
 
             sequences = torch.tensor(sequences, dtype=torch.float, requires_grad=False).to(device)
-            tweets= torch.tensor(tweets, dtype=torch.float, requires_grad=False).to(device)
+            tweets = torch.tensor(tweets, dtype=torch.float, requires_grad=False).to(device)
             labels = torch.tensor(labels, dtype=torch.long, requires_grad=False).to(device)
 
             output = model(sequences, tweets, h0)
@@ -76,7 +76,7 @@ def predict(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, con
                         false_acc.append(1)
     print("True acc: {}/{} ({:,})".format(sum(true_acc), len(true_acc), sum(true_acc) / len(true_acc)))
     print("False acc: {}/{} ({:,})".format(sum(false_acc), len(false_acc), sum(false_acc) / len(false_acc)))
-    print("Total acc: {}/{}{:,}".format(sum(true_acc + false_acc), (len(true_acc) + len(false_acc)), sum(true_acc + false_acc) / (len(true_acc) + len(false_acc))))
+    print("Total acc: {}/{} ({:,})".format(sum(true_acc + false_acc), (len(true_acc) + len(false_acc)), sum(true_acc + false_acc) / (len(true_acc) + len(false_acc))))
 
 
 def train(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, config: dict, device):
@@ -101,10 +101,12 @@ def train(model: DetectModel, dataset: SeqDataset, dataloader: DataLoader, confi
 
                 loss = criterion(output, labels)
                 loss.backward()
+
+                norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
                 optimizer.step()
 
                 if step % 30 == 0:
-                    tqdm.write("Step: {:,} Loss: {:,}".format(step, loss))
+                    tqdm.write("Step: {:,} Loss: {:.5f} L2 gradient norm: {:.5f}".format(step, loss, norm))
 
             if args.logdir is not None:
                 path = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.logdir)

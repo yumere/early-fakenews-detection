@@ -10,9 +10,9 @@ from fakenews_detection.topic_feature import TopicFeature
 
 class SeqDataset(Dataset):
     def __init__(self, dataset, topic_feature: TopicFeature):
+        super(SeqDataset, self).__init__()
         self.dataset = dataset
         self.topic_feature = topic_feature
-        super(SeqDataset, self).__init__()
 
     def __getitem__(self, item):
         sequence, tweet, label = self.dataset[item]
