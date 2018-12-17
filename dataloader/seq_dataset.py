@@ -9,7 +9,7 @@ class SeqDataset(Dataset):
 
     def __getitem__(self, item):
         seq_data, text, label, user_id, created_at = self.dataset[item]
-        return np.array(seq_data), label
+        return seq_data, label
 
     def __len__(self):
         return len(self.dataset)
@@ -26,7 +26,7 @@ class SeqDataset(Dataset):
     def collate_fn(data):
         seq_data, labels = zip(*data)
 
-        return np.array(seq_data), np.array(labels)
+        return seq_data, labels
 
 
 def dataset_test(file_path):
