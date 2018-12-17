@@ -4,6 +4,7 @@ import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -33,6 +34,7 @@ def train(args, config: dict):
     optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss(reduction='mean')
     initial_hidden_state = torch.zeros(config['rnn_layers'], args.batch_size, config['hidden_size'], dtype=torch.float, requires_grad=False).to(device)
+
     for epoch in range(args.epoch):
 
         lr = args.lr * (0.9) ** epoch
@@ -54,6 +56,41 @@ def train(args, config: dict):
 
                 if step % 500 == 0:
                     tqdm.write("Epoch: {:3,} / Step: {:5,} / Loss: {:10.5f} / Learning rate: {:.4f}".format(epoch, step, loss.item(), lr))
+
+            tqdm.write("Evaluating on {:,}".format(epoch))
+            acc, loss = evaluate(model, dev_loader, config)
+            tqdm.write("Accuracy: {:6.4f} / Loss: {:.7f}".format(acc, loss))
+
+
+def evaluate(model: DetectModel, loader: DataLoader, config: dict)->tuple:
+    batch_size = loader.batch_size
+    device = torch.device("cuda:{}".format(args.cuda) if args.cuda else 'cpu')
+    criterion = nn.CrossEntropyLoss(reduction='none')
+
+    total_loss = []
+    total_output = []
+    total_labels = []
+
+    with torch.no_grad():
+        initial_hidden_state = torch.zeros(config['rnn_layers'], batch_size, config['hidden_size'], dtype=torch.float).to(device)
+        for step, (seq_inputs, labels) in enumerate(loader):
+            seq_inputs = torch.tensor(seq_inputs, dtype=torch.float).to(device)
+            labels = torch.tensor(labels, dtype=torch.long).to(device)
+
+            output = model(seq_inputs, initial_hidden_state)
+            loss = criterion(output, labels)
+            total_loss.append(loss)
+            output = F.softmax(output, dim=1).argmax(dim=1)
+            total_output.append(output)
+            total_labels.append(labels)
+
+        total_loss = torch.cat(total_loss).contiguous().mean()
+        total_output = torch.cat(total_output)
+        total_labels = torch.cat(total_labels)
+
+        accuracy = total_output.eq(total_labels).sum().item() / total_output.shape[0]
+
+    return (accuracy, total_loss)
 
 
 if __name__ == '__main__':
