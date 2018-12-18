@@ -4,6 +4,7 @@ import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.metrics import precision_recall_fscore_support
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -58,8 +59,10 @@ def train(args, config: dict):
                     tqdm.write("Epoch: {:3,} / Step: {:5,} / Loss: {:10.5f} / Learning rate: {:.4f}".format(epoch, step, loss.item(), lr))
 
             tqdm.write("Evaluating on {:,}".format(epoch))
-            acc, loss = evaluate(model, dev_loader, config)
-            tqdm.write("Accuracy: {:6.4f} / Loss: {:.7f}".format(acc, loss))
+            precision, recall, f1, loss = evaluate(model, dev_loader, config)
+            tqdm.write("Label False | Precision: {:6.4f} | Recall: {:6.4f} | F1-Score: {:6.4f} | Loss: {:.7f}".format(precision[0], recall[0], f1[0], loss))
+            tqdm.write("Label True  | Precision: {:6.4f} | Recall: {:6.4f} | F1-Score: {:6.4f} | Loss: {:.7f}".format(precision[1], recall[1], f1[1], loss))
+            tqdm.write("\n")
 
 
 def evaluate(model: DetectModel, loader: DataLoader, config: dict)->tuple:
@@ -85,27 +88,28 @@ def evaluate(model: DetectModel, loader: DataLoader, config: dict)->tuple:
             total_labels.append(labels)
 
         total_loss = torch.cat(total_loss).contiguous().mean()
-        total_output = torch.cat(total_output)
-        total_labels = torch.cat(total_labels)
+        total_output = torch.cat(total_output).cpu().numpy()
+        total_labels = torch.cat(total_labels).cpu().numpy()
 
-        accuracy = total_output.eq(total_labels).sum().item() / total_output.shape[0]
+        precision, recall, f1, _ = precision_recall_fscore_support(total_labels, total_output, labels=[0, 1])
 
-    return (accuracy, total_loss)
+    return precision, recall, f1, total_loss
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, help="config file path (required)", required=True)
-    parser.add_argument('--cuda', type=int, default=None, help="GPU number (default: None=CPU)")
-    parser.add_argument('--logdir', type=str, help="log directory (optional)")
     parser.add_argument('--mode', type=str, choices=['train', 'test'], default='train')
-
+    parser.add_argument('--config', type=str, help="config file path (required)", required=True)
+    parser.add_argument('--topic_feature', action='store_true', default=False, help="Use topic feature of tweet")
     parser.add_argument('--train_file', type=str, help="data file for train", required=True)
     parser.add_argument('--dev_file', type=str, help="data file for dev")
+
+    parser.add_argument('--logdir', type=str, help="log directory (optional)")
     parser.add_argument('--lr', type=float, default=0.2, metavar="0.2", help="learning rate for model")
     parser.add_argument('--batch_size', type=int, default=32, metavar='32', help="batch size for learning")
     parser.add_argument('--epoch', type=int, default=10, metavar="10", help="the number of epochs")
     parser.add_argument('-n', '--num_workers', type=int, default=0, help="CPUs for dataloader")
+    parser.add_argument('--cuda', type=int, default=None, help="GPU number (default: None=CPU)")
 
     args = parser.parse_args()
     model_config = json.load(open(args.config, "rt"))['model']
